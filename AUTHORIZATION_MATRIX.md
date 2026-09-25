@@ -49,7 +49,7 @@ It covers:
 
 | Operation | Expected Caller | Auth Required | Errors | Governance |
 |-----------|----------------|---------------|--------|------------|
-| `announce` | Anyone | 🔐 (signer) | `scheme_id != 2` → panic<br>`metadata empty` → panic | None (immutable) |
+| `announce` | Anyone (permissionless) | — | `scheme_id != 2` → panic<br>`metadata empty` → panic | None (immutable) |
 | `init` | — | — | — | ❌ Not implemented |
 | `pause` | — | — | — | ❌ Not implemented |
 | `upgrade` | — | — | — | ❌ Frozen |
@@ -177,7 +177,7 @@ It covers:
 | `approve_rotate_auction_admin` | **Current Signer** | 👥 `caller ∈ signers` + 🔐 | `NoPendingRotation`, `AlreadyApprovedRotation`, `NotSigner` | 👥 |
 | `execute_rotate_auction_admin` | **Current Signer** | 👥 `caller ∈ signers` + 🔐 | `NoPendingRotation`, `QuorumNotMet`, `TimelockNotElapsed`, `AuctionInProgress`, `NotSigner` | 👥 + ⏱️ 7d |
 | `cancel_rotate_auction_admin` | **Current Signer** | 👥 `caller ∈ signers` + 🔐 | `NoPendingRotation`, `NotSigner` | 👥 |
-| `init_auctions` | Deployer / Admin | — | `AuctionError` variants | One-time |
+| `init_auctions` | Admin | 🔐 `admin.require_auth()` | `AuctionError` variants | One-time |
 | `start_auction` | Anyone | — | `NotPremiumName`, `NameAlreadyRegistered` | — |
 | `commit_bid` | Bidder | 🔐 `bidder.require_auth()` | `AuctionError` variants | — |
 | `reveal_bid` | Bidder | 🔐 `bidder.require_auth()` | `AuctionError` variants | — |
