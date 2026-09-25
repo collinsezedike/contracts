@@ -124,7 +124,20 @@ This matrix documents the authorization model for every administrative operation
 
 ---
 
-### 6. `wraith-names` (Upgradeable: Timelock + Multisig + Auction Admin)
+### 6. `stealth-splitter` (Immutable)
+
+| Operation | Expected Caller | Auth Required | Errors | Governance |
+|-----------|----------------|---------------|--------|------------|
+| `init` | Deployer | — | `AlreadyInitialized` | One-time |
+| `create_split` | Creator | 🔐 `creator.require_auth()` | `AlreadyInitialized`, `EmptyBeneficiaries`, `TooManyBeneficiaries`, `InvalidMetaAddressLength` | None (immutable) |
+| `fund_split` | Funder | 🔐 `funder.require_auth()` | `NotInitialized`, `SplitNotFound`, `InvalidAmount`, vector length mismatch | None (immutable) |
+| `get_split` | Anyone (view) | — | `SplitNotFound` | None |
+
+**Notes**: Immutable split definition storage. Max 25 beneficiaries with 64-byte meta-addresses each. Atomic fund + distribute + announce. No admin, no pause, no upgrade, no multisig.
+
+---
+
+### 7. `wraith-names` (Upgradeable: Timelock + Multisig + Auction Admin)
 
 | Operation | Expected Caller | Auth Required | Errors | Governance |
 |-----------|----------------|---------------|--------|------------|
@@ -166,7 +179,7 @@ This matrix documents the authorization model for every administrative operation
 
 ---
 
-### 7. `wraith-asset-policy` (Admin-controlled allowlist)
+### 8. `wraith-asset-policy` (Admin-controlled allowlist)
 
 | Operation | Expected Caller | Auth Required | Errors | Governance |
 |-----------|----------------|---------------|--------|------------|
@@ -179,7 +192,7 @@ This matrix documents the authorization model for every administrative operation
 
 ---
 
-### 8. `governance` (On-Chain Token Voting PoC)
+### 9. `governance` (On-Chain Token Voting PoC)
 
 | Operation | Expected Caller | Auth Required | Errors | Governance |
 |-----------|----------------|---------------|--------|------------|
@@ -329,6 +342,7 @@ This matrix documents the authorization model for every administrative operation
 | Chain | Contract | Init Auth | Re-init Protection |
 |-------|----------|-----------|-------------------|
 | Stellar | stealth-sender | Deployer (arg) | `AlreadyInitialized` |
+| Stellar | stealth-splitter | Deployer (arg) | `AlreadyInitialized` |
 | Stellar | stealth-vault | Deployer (arg) | `AlreadyInitialized` |
 | Stellar | wraith-names | Deployer (arg) | Idempotent (first wins) |
 | Stellar | wraith-asset-policy | Deployer (arg) | `already initialized` (panic) |
@@ -377,6 +391,7 @@ This matrix documents the authorization model for every administrative operation
 | Stellar | stealth-registry | ❌ Frozen | — | — | — | N/A |
 | Stellar | stealth-sender | ✅ | 👑 Admin | 👥 3-of-5 | ⏱️ 7d | ✅ `renounce_admin` |
 | Stellar | stealth-batch-sender | ✅ | 👑 Admin | 👥 3-of-5 | ⏱️ 7d | ✅ (planned) |
+| Stellar | stealth-splitter | ❌ Immutable | — | — | — | N/A |
 | Stellar | stealth-vault | ✅ | 👑 Admin | 👥 3-of-5 | ⏱️ 7d | ✅ (planned) |
 | Stellar | wraith-names | ✅ | 👑 Admin | 👥 3-of-5 | ⏱️ 7d | ✅ `renounce_admin` |
 | Stellar | wraith-asset-policy | ❌ (admin only) | 👑 Admin | — | — | ❌ |
@@ -410,6 +425,23 @@ This matrix documents the authorization model for every administrative operation
 | 13 | AlreadyApprovedRotation | Signer already approved |
 | 14 | QuorumNotMet | Approvals < threshold |
 | 15 | TimelockNotElapsed | <7 days since propose |
+
+---
+
+#### `stealth-splitter` (`SplitterError`)
+
+| Code | Error | Condition |
+|------|-------|-----------|
+| 1 | AlreadyInitialized | `init` called twice |
+| 2 | NotInitialized | Operation before `init` |
+| 3 | SplitNotFound | Split ID not in storage |
+| 4 | TooManyBeneficiaries | >25 beneficiaries |
+| 5 | WeightOverflow | Weight sum overflow |
+| 6 | InvalidMetaAddressLength | Meta-address ≈64 bytes |
+| 7 | InvalidAmount | Amount ≤0 |
+| 8 | EmptyBeneficiaries | No beneficiaries provided |
+
+---
 
 #### `stealth-vault` (`VaultError`)
 | Code | Error | Condition |
@@ -557,6 +589,7 @@ This matrix documents the authorization model for every administrative operation
 | Stellar | wraith-names | Replay key (sha256 of auth message) stored in `DataKey::Replay` |
 | Stellar | stealth-sender | Multisig rotation: `PendingRotation` state + approvals vec |
 | Stellar | wraith-names | Multisig rotation: `PendingRotation` state + approvals vec |
+| Stellar | stealth-splitter | None (immutable; deterministic split_id from beneficiaries + salt) |
 | EVM | ERC6538Registry | Nonce per registrant (`_nonces[registrant]++`) |
 | EVM | WraithNames | Nonce per spending address (`nonces[spendingAddr]++`) |
 | Solana | wraith-names | PDA uniqueness (one per name) |
