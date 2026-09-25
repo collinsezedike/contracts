@@ -8,12 +8,22 @@
 
 ## Overview
 
-This matrix documents the authorization model for every administrative operation across all Wraith Protocol contracts. It covers:
+This matrix documents the authorization model for every administrative operation across all 19 Wraith Protocol contracts:
 
+| Chain | Contracts |
+|-------|-----------|
+| Stellar | 9 (stealth-announcer, stealth-registry, stealth-sender, stealth-batch-sender, stealth-splitter, stealth-vault, wraith-names, wraith-asset-policy, governance) |
+| EVM | 5 (ERC5564Announcer, ERC6538Registry, WraithSender, WraithNames, WraithWithdrawer) |
+| Solana | 3 (wraith-announcer, wraith-sender, wraith-names) |
+| CKB | 2 (wraith-stealth-lock, wraith-names-type) |
+
+It covers:
 - **Expected caller** for each operation
 - **Error codes** for unauthorized, replay, zero-address, and stale-authority cases
 - **Governance layer** (multisig, timelock, token voting)
 - **Chain-specific enforcement mechanisms**
+
+**Note**: The Stellar contracts (sender, batch-sender, vault, names) have no upgrade function and no `renounce_admin`. The `init_multisig` function has no caller authorization check (anyone can call it once). The upgrade authority table reflects the current source code.
 
 ---
 
@@ -63,7 +73,7 @@ This matrix documents the authorization model for every administrative operation
 
 ---
 
-### 3. `stealth-sender` (Upgradeable: Timelock + Multisig)
+### 3. `stealth-sender` (Admin-pausable, Multisig Rotation)
 
 | Operation | Expected Caller | Auth Required | Errors | Governance |
 |-----------|----------------|---------------|--------|------------|
@@ -74,19 +84,18 @@ This matrix documents the authorization model for every administrative operation
 | `pause` | **Admin** | 👑 `caller == admin` + 🔐 | `unauthorized: only admin can pause` (panic) | 👑 Admin |
 | `unpause` | **Admin** | 👑 `caller == admin` + 🔐 | `unauthorized: only admin can unpause` (panic) | 👑 Admin |
 | `is_paused` | Anyone (view) | — | — | — |
-| `init_multisig` | Deployer / Admin | — | `MultisigAlreadyInitialized`, `InvalidThreshold` | 👥 3-of-5 |
+| `init_multisig` | Anyone | — | `MultisigAlreadyInitialized`, `InvalidThreshold` | One-time setup |
 | `propose_rotate_signers` | **Current Signer** | 👥 `caller ∈ signers` + 🔐 | `MultisigNotInitialized`, `NotSigner`, `RotationAlreadyPending`, `InvalidThreshold` | 👥 + ⏱️ 7d |
 | `approve_rotate_signers` | **Current Signer** | 👥 `caller ∈ signers` + 🔐 | `NoPendingRotation`, `AlreadyApprovedRotation`, `NotSigner` | 👥 |
 | `execute_rotate_signers` | **Current Signer** | 👥 `caller ∈ signers` + 🔐 | `NoPendingRotation`, `QuorumNotMet`, `TimelockNotElapsed`, `NotSigner` | 👥 + ⏱️ 7d |
 | `cancel_rotate_signers` | **Current Signer** | 👥 `caller ∈ signers` + 🔐 | `NoPendingRotation`, `NotSigner` | 👥 |
-| `upgrade` | **Admin** (via multisig) | 👑 + 👥 + ⏱️ | `NotAdmin` (if impl.) | 👑 + 👥 + ⏱️ 7d |
 
 **Paused Operations**: `send`, `batch_send`  
 **Available During Pause**: `withdraw_many` (exits always allowed)
 
 ---
 
-### 4. `stealth-batch-sender` (Upgradeable: Timelock + Multisig)
+### 4. `stealth-batch-sender` (Admin-pausable, Multisig Rotation)
 
 | Operation | Expected Caller | Auth Required | Errors | Governance |
 |-----------|----------------|---------------|--------|------------|
@@ -94,14 +103,18 @@ This matrix documents the authorization model for every administrative operation
 | `batch_send` | Sender | 🔐 `sender.require_auth()` | `NotInitialized`, `Paused`, `TokenNotAllowed`, `LengthMismatch` | — |
 | `pause` | **Admin** | 👑 `caller == admin` + 🔐 | `unauthorized` (panic) | 👑 Admin |
 | `unpause` | **Admin** | 👑 `caller == admin` + 🔐 | `unauthorized` (panic) | 👑 Admin |
-| `upgrade` | **Admin** (via multisig) | 👑 + 👥 + ⏱️ | — | 👑 + 👥 + ⏱️ 7d |
+| `init_multisig` | Anyone | — | `MultisigAlreadyInitialized`, `InvalidThreshold` | One-time setup |
+| `propose_rotate_signers` | **Current Signer** | 👥 `caller ∈ signers` + 🔐 | `MultisigNotInitialized`, `NotSigner`, `RotationAlreadyPending`, `InvalidThreshold` | 👥 + ⏱️ 7d |
+| `approve_rotate_signers` | **Current Signer** | 👥 `caller ∈ signers` + 🔐 | `NoPendingRotation`, `AlreadyApprovedRotation`, `NotSigner` | 👥 |
+| `execute_rotate_signers` | **Current Signer** | 👥 `caller ∈ signers` + 🔐 | `NoPendingRotation`, `QuorumNotMet`, `TimelockNotElapsed`, `NotSigner` | 👥 + ⏱️ 7d |
+| `cancel_rotate_signers` | **Current Signer** | 👥 `caller ∈ signers` + 🔐 | `NoPendingRotation`, `NotSigner` | 👥 |
 
 **Paused Operations**: `batch_send`  
 **No withdrawal path** — users exit via `stealth-sender`
 
 ---
 
-### 5. `stealth-vault` (Upgradeable: Timelock + Multisig)
+### 5. `stealth-vault` (Admin-pausable)
 
 | Operation | Expected Caller | Auth Required | Errors | Governance |
 |-----------|----------------|---------------|--------|------------|
@@ -117,7 +130,6 @@ This matrix documents the authorization model for every administrative operation
 | `is_paused` | Anyone (view) | — | — | — |
 | `admin` | Anyone (view) | — | `NotInitialized` | — |
 | `grace_period` | Anyone (view) | — | — | — |
-| `upgrade` | **Admin** (via multisig) | 👑 + 👥 + ⏱️ | — | 👑 + 👥 + ⏱️ 7d |
 
 **Paused Operations**: `deposit`  
 **Available During Pause**: `claim`, `refund`, `refund_permissionless`, all views
@@ -137,7 +149,7 @@ This matrix documents the authorization model for every administrative operation
 
 ---
 
-### 7. `wraith-names` (Upgradeable: Timelock + Multisig + Auction Admin)
+### 7. `wraith-names` (Admin-pausable, Multisig Rotation + Auction Admin)
 
 | Operation | Expected Caller | Auth Required | Errors | Governance |
 |-----------|----------------|---------------|--------|------------|
@@ -156,7 +168,7 @@ This matrix documents the authorization model for every administrative operation
 | `pause` | **Admin** | 👑 `caller == admin` + 🔐 | `unauthorized: only admin can pause` (panic) | 👑 Admin |
 | `unpause` | **Admin** | 👑 `caller == admin` + 🔐 | `unauthorized: only admin can unpause` (panic) | 👑 Admin |
 | `is_paused` | Anyone (view) | — | — | — |
-| `init_multisig` | Deployer / Admin | — | `MultisigAlreadyInitialized`, `InvalidThreshold` | 👥 3-of-5 |
+| `init_multisig` | Anyone | — | `MultisigAlreadyInitialized`, `InvalidThreshold` | One-time setup |
 | `propose_rotate_signers` | **Current Signer** | 👥 `caller ∈ signers` + 🔐 | `MultisigNotInitialized`, `NotSigner`, `RotationAlreadyPending`, `InvalidThreshold` | 👥 + ⏱️ 7d |
 | `approve_rotate_signers` | **Current Signer** | 👥 `caller ∈ signers` + 🔐 | `NoPendingRotation`, `AlreadyApprovedRotation`, `NotSigner` | 👥 |
 | `execute_rotate_signers` | **Current Signer** | 👥 `caller ∈ signers` + 🔐 | `NoPendingRotation`, `QuorumNotMet`, `TimelockNotElapsed`, `NotSigner` | 👥 + ⏱️ 7d |
@@ -172,7 +184,6 @@ This matrix documents the authorization model for every administrative operation
 | `settle_auction` | Anyone (permissionless) | — | `AuctionError` variants | — |
 | `withdraw_bid` | Bidder | 🔐 `bidder.require_auth()` | `AuctionError` variants | — |
 | `claim_name` | Winner | 🔐 `winner.require_auth()` | `AuctionError` variants | — |
-| `upgrade` | **Admin** (via multisig) | 👑 + 👥 + ⏱️ | — | 👑 + 👥 + ⏱️ 7d |
 
 **Paused Operations**: `register`, `register_on_behalf`, `update`, `update_on_behalf`, `release`, `release_on_behalf`, `bulk_register`, `extend_name_ttl`  
 **Available During Pause**: `resolve`, `name_of`, `bulk_renew`, all auction ops
@@ -389,11 +400,11 @@ This matrix documents the authorization model for every administrative operation
 |-------|----------|-------------|-------|----------|----------|-------------------|
 | Stellar | stealth-announcer | ❌ Frozen | — | — | — | N/A |
 | Stellar | stealth-registry | ❌ Frozen | — | — | — | N/A |
-| Stellar | stealth-sender | ✅ | 👑 Admin | 👥 3-of-5 | ⏱️ 7d | ✅ `renounce_admin` |
-| Stellar | stealth-batch-sender | ✅ | 👑 Admin | 👥 3-of-5 | ⏱️ 7d | ✅ (planned) |
+| Stellar | stealth-sender | ❌ No upgrade function | 👑 Admin (pause only) | 👥 Rotation only | — | N/A |
+| Stellar | stealth-batch-sender | ❌ No upgrade function | 👑 Admin (pause only) | 👥 Rotation only | — | N/A |
 | Stellar | stealth-splitter | ❌ Immutable | — | — | — | N/A |
-| Stellar | stealth-vault | ✅ | 👑 Admin | 👥 3-of-5 | ⏱️ 7d | ✅ (planned) |
-| Stellar | wraith-names | ✅ | 👑 Admin | 👥 3-of-5 | ⏱️ 7d | ✅ `renounce_admin` |
+| Stellar | stealth-vault | ❌ No upgrade function | 👑 Admin (pause only) | — | — | N/A |
+| Stellar | wraith-names | ❌ No upgrade function | 👑 Admin (pause only) | 👥 Rotation only | — | N/A |
 | Stellar | wraith-asset-policy | ❌ (admin only) | 👑 Admin | — | — | ❌ |
 | Stellar | governance | ❌ PoC | 👑 Admin | — | ⏱️ (vote) | — |
 | EVM | All | ❌ Immutable | — | — | — | N/A |
